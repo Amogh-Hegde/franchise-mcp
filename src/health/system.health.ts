@@ -1,4 +1,5 @@
 import { HealthCheck, HealthCheckInterface, HealthCheckResult } from '@nitrostack/core';
+import mongoose from 'mongoose';
 
 /**
  * System Health Check
@@ -29,16 +30,21 @@ export class SystemHealthCheck implements HealthCheckInterface {
       
       // Consider unhealthy if memory usage is > 90%
       const memoryPercent = (memoryUsage.heapUsed / memoryUsage.heapTotal) * 100;
-      const isHealthy = memoryPercent < 90;
+      const mongoStates = ['disconnected', 'connected', 'connecting', 'disconnecting'];
+      const mongoState = mongoStates[mongoose.connection.readyState] ?? `unknown(${mongoose.connection.readyState})`;
+      const isHealthy = memoryPercent < 90 && mongoose.connection.readyState !== 0;
       
       return {
         status: isHealthy ? 'up' : 'degraded',
         message: isHealthy 
           ? 'System is healthy' 
-          : 'High memory usage detected',
+          : mongoose.connection.readyState === 0
+            ? 'System is running but MongoDB is disconnected'
+            : 'High memory usage detected',
         details: {
           uptime: `${uptimeSeconds}s`,
           memory: `${memoryUsedMB}MB / ${memoryTotalMB}MB (${Math.round(memoryPercent)}%)`,
+          mongodb: mongoState,
           pid: process.pid,
           nodeVersion: process.version,
         },
@@ -52,4 +58,3 @@ export class SystemHealthCheck implements HealthCheckInterface {
     }
   }
 }
-

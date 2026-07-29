@@ -269,6 +269,9 @@ export class FranchiseDataService implements OnModuleInit, OnApplicationShutdown
   private readonly mongoUri = process.env.MONGODB_URI;
   private readonly dbName = process.env.MONGODB_DB_NAME || 'franchise_ops';
   private readyPromise?: Promise<void>;
+  private lastConnectionError?: string;
+  private lastConnectionAttemptAt?: string;
+  private hasSeeded = false;
 
   private readonly StoreModel: Model<Store> = mongoose.models.FranchiseStore || mongoose.model<Store>('FranchiseStore', storeSchema);
   private readonly ProductModel: Model<Product> = mongoose.models.FranchiseProduct || mongoose.model<Product>('FranchiseProduct', productSchema);
@@ -278,7 +281,7 @@ export class FranchiseDataService implements OnModuleInit, OnApplicationShutdown
   private readonly TransferModel: Model<Transfer> = mongoose.models.FranchiseTransfer || mongoose.model<Transfer>('FranchiseTransfer', transferSchema);
 
   async onModuleInit() {
-    await this.ready();
+    await this.ensureMongoReady('startup', false);
   }
 
   async onApplicationShutdown() {
@@ -288,26 +291,97 @@ export class FranchiseDataService implements OnModuleInit, OnApplicationShutdown
   }
 
   private async ready() {
-    if (!this.readyPromise) {
-      this.readyPromise = this.connectAndSeed();
+    await this.ensureMongoReady('runtime request', true);
+  }
+
+  private getMongoTarget() {
+    if (!this.mongoUri) {
+      return 'missing MONGODB_URI';
     }
-    return this.readyPromise;
+
+    try {
+      const url = new URL(this.mongoUri);
+      return `${url.protocol}//${url.host}${url.pathname}`;
+    } catch {
+      return 'unparseable MongoDB URI';
+    }
+  }
+
+  getDatabaseStatus() {
+    return {
+      readyState: mongoose.connection.readyState,
+      target: this.getMongoTarget(),
+      dbName: this.dbName,
+      lastConnectionAttemptAt: this.lastConnectionAttemptAt,
+      lastConnectionError: this.lastConnectionError,
+    };
+  }
+
+  private buildConnectionErrorMessage(error: unknown) {
+    const details = error instanceof Error ? error.message : String(error);
+    return `MongoDB is unavailable for ${this.dbName} at ${this.getMongoTarget()}. ${details}`;
+  }
+
+  private async ensureMongoReady(reason: string, throwOnFailure: boolean) {
+    if (mongoose.connection.readyState === 1) {
+      return;
+    }
+
+    if (!this.mongoUri) {
+      const message = 'MONGODB_URI is required. Set it in your environment before starting the MCP server.';
+      this.lastConnectionError = message;
+      console.error(`[MongoDB] ${message}`);
+      if (throwOnFailure) {
+        throw new Error(message);
+      }
+      return;
+    }
+
+    if (!this.readyPromise) {
+      this.lastConnectionAttemptAt = new Date().toISOString();
+      console.info(`[MongoDB] Connecting for ${reason}: ${this.getMongoTarget()} (db: ${this.dbName})`);
+      this.readyPromise = this.connectAndSeed()
+        .then(() => {
+          this.lastConnectionError = undefined;
+          console.info(`[MongoDB] Connection ready for ${this.dbName}`);
+        })
+        .catch((error) => {
+          this.lastConnectionError = this.buildConnectionErrorMessage(error);
+          console.error(`[MongoDB] ${this.lastConnectionError}`);
+          throw error;
+        })
+        .finally(() => {
+          if (mongoose.connection.readyState !== 1) {
+            this.readyPromise = undefined;
+          }
+        });
+    }
+
+    try {
+      await this.readyPromise;
+    } catch (error) {
+      if (throwOnFailure) {
+        throw new Error(this.buildConnectionErrorMessage(error));
+      }
+    }
   }
 
   private async connectAndSeed() {
-    if (!this.mongoUri) {
-      throw new Error('MONGODB_URI is required. Set it in your environment before starting the MCP server.');
+    if (mongoose.connection.readyState === 0) {
+      await mongoose.connect(this.mongoUri!, {
+        dbName: this.dbName,
+        serverSelectionTimeoutMS: 8000,
+        connectTimeoutMS: 8000,
+      });
     }
 
-    if (mongoose.connection.readyState === 0) {
-      await mongoose.connect(this.mongoUri, {
-        dbName: this.dbName,
-        serverSelectionTimeoutMS: 5000,
-      });
+    if (this.hasSeeded) {
+      return;
     }
 
     const storeCount = await this.StoreModel.countDocuments();
     if (storeCount > 0) {
+      this.hasSeeded = true;
       return;
     }
 
@@ -319,6 +393,8 @@ export class FranchiseDataService implements OnModuleInit, OnApplicationShutdown
     await this.EmployeeModel.insertMany(seed.employees);
     await this.SaleModel.insertMany(seed.sales);
     await this.TransferModel.insertMany(seed.transfers);
+    this.hasSeeded = true;
+    console.info(`[MongoDB] Seeded initial franchise data into ${this.dbName}`);
   }
 
   private normalizeMap(value: unknown): Record<string, number> {
