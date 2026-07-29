@@ -1,0 +1,1 @@
+mcp server to handle franchise operations

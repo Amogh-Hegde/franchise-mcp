@@ -1,0 +1,74 @@
+{
+  "version": "1.0.0",
+  "widgets": [
+    {
+      "uri": "/store-dashboard",
+      "name": "Store Dashboard",
+      "description": "Shows franchise KPIs, store health, and low-stock alerts",
+      "examples": [
+        {
+          "name": "Network Overview",
+          "description": "Summarises active stores, revenue, and low stock warnings",
+          "data": {
+            "totals": {
+              "stores": 3,
+              "activeStores": 2,
+              "revenue": 1215
+            }
+          }
+        }
+      ],
+      "tags": ["franchise", "dashboard", "operations"]
+    },
+    {
+      "uri": "/inventory-widget",
+      "name": "Inventory Widget",
+      "description": "Displays inventory health and category totals",
+      "examples": [
+        {
+          "name": "Low Stock Snapshot",
+          "description": "Highlights reorder candidates",
+          "data": {
+            "lowStockCount": 2
+          }
+        }
+      ],
+      "tags": ["inventory", "stock", "franchise"]
+    },
+    {
+      "uri": "/sales-dashboard",
+      "name": "Sales Dashboard",
+      "description": "Shows revenue by store and recent transactions",
+      "examples": [
+        {
+          "name": "Revenue Overview",
+          "description": "Displays store-level revenue totals",
+          "data": {
+            "totalsByStore": [
+              { "storeName": "NitroStack Koramangala", "total": 670 }
+            ]
+          }
+        }
+      ],
+      "tags": ["sales", "revenue", "franchise"]
+    },
+    {
+      "uri": "/transfer-timeline",
+      "name": "Transfer Timeline",
+      "description": "Shows stock transfers between stores over time",
+      "examples": [
+        {
+          "name": "Transfer Feed",
+          "description": "Displays pending and received transfers",
+          "data": {
+            "transfers": [
+              { "id": "trf-1", "status": "pending", "quantity": 8 }
+            ]
+          }
+        }
+      ],
+      "tags": ["transfers", "inventory", "timeline"]
+    }
+  ],
+  "generatedAt": "2025-01-01T00:00:00.000Z"
+}
